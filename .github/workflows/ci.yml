@@ -127,54 +127,30 @@ jobs:
             libssl-dev \
             pkg-config
 
-      # libkrun is not easily available on Ubuntu, so we create a stub library
-      # for linking. This allows us to compile and run unit tests.
-      # Full integration tests require macOS or a Linux machine with KVM.
-      - name: Create libkrun stub for linking
+      - name: Setup Git LFS
         run: |
-          # Create minimal stub that satisfies the linker
-          cat > /tmp/libkrun_stub.c << 'EOF'
-          // Stub implementations - these won't be called in unit tests
-          int krun_create_ctx() { return -1; }
-          int krun_free_ctx(int ctx) { return 0; }
-          int krun_set_vm_config(int ctx, int cpus, int mem) { return -1; }
-          int krun_set_root(int ctx, const char* path) { return -1; }
-          int krun_set_workdir(int ctx, const char* path) { return -1; }
-          int krun_set_exec(int ctx, const char* path, char** argv, char** env) { return -1; }
-          int krun_start_enter(int ctx) { return -1; }
-          int krun_set_log_level(int level) { return 0; }
-          int krun_add_disk2(int ctx, const char* id, const char* path, int flags, int ro) { return -1; }
-          int krun_set_port_map(int ctx, char** map) { return -1; }
-          int krun_add_vsock_port(int ctx, int port, const char* path) { return -1; }
-          int krun_add_vsock_port2(int ctx, int port, const char* path, int flags) { return -1; }
-          int krun_disable_implicit_vsock(int ctx) { return -1; }
-          int krun_add_vsock(int ctx, int tsi_features) { return -1; }
-          int krun_set_passt_fd(int ctx, int fd) { return -1; }
-          int krun_add_virtiofs(int ctx, const char* tag, const char* path) { return -1; }
-          int krun_add_virtiofs2(int ctx, const char* tag, const char* path, int flags) { return -1; }
-          int krun_set_console_output(int ctx, const char* path) { return -1; }
-          int krun_add_virtio_console_default(int ctx) { return -1; }
-          EOF
-          gcc -shared -fPIC -o /tmp/libkrun.so /tmp/libkrun_stub.c
-          sudo cp /tmp/libkrun.so /usr/local/lib/
-          sudo ln -sf /usr/local/lib/libkrun.so /usr/local/lib/libkrun.1.dylib
-          sudo ldconfig
+          git lfs install
+          git lfs pull
+
+      - name: Verify LFS libraries
+        run: |
+          ls -la lib/linux-${{ matrix.arch }}/
+          file lib/linux-${{ matrix.arch }}/libkrun.so
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
         env:
-          LIBRARY_PATH: /usr/local/lib
+          LD_LIBRARY_PATH: ${{ github.workspace }}/lib/linux-${{ matrix.arch }}
 
       - name: Clippy
         run: cargo clippy --all-targets --target ${{ matrix.target }} -- -D warnings
         env:
-          LIBRARY_PATH: /usr/local/lib
+          LD_LIBRARY_PATH: ${{ github.workspace }}/lib/linux-${{ matrix.arch }}
 
       - name: Run unit tests
         run: cargo test --lib --target ${{ matrix.target }}
         env:
-          LIBRARY_PATH: /usr/local/lib
-          LD_LIBRARY_PATH: /usr/local/lib
+          LD_LIBRARY_PATH: ${{ github.workspace }}/lib/linux-${{ matrix.arch }}
       # Note: Full VM integration tests require KVM + real libkrun.
       # Run integration tests locally on a machine with KVM access.
 
